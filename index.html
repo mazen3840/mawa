@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B4A63">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="موارد">
+<meta name="application-name" content="موارد">
+<meta name="msapplication-TileColor" content="#0B4A63">
+<meta name="msapplication-TileImage" content="assets/icons/icon-144.png">
+
+<title>تسجيل الدخول — شركة الموارد</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/mawared.css?v=20261004-brand">
+</head>
+<body>
+<main class="auth">
+  <section class="auth-side">
+    <img class="auth-brand-logo" src="assets/brand-logo.png" alt="شعار شركة الموارد لتحصيل الديون">
+    <div>
+      <h1>شركة الموارد<br>منظومة التحصيل</h1>
+      <p style="margin-top:10px">متابعة المكالمات والزيارات الميدانية وبيانات العملاء في مكان واحد.</p>
+    </div>
+    <div class="foot">للدخول استخدم اسم المستخدم اللي أخدته من المشرف</div>
+  </section>
+
+  <section class="auth-form">
+    <form class="auth-card" id="form" novalidate>
+      <h2>تسجيل الدخول</h2>
+      <p class="muted">ادخل بياناتك للمتابعة</p>
+
+      <div class="alert bad hide" id="err" role="alert"><span id="errIcon"></span><span id="errText"></span><span id="errDetail" class="small hide" style="display:block;direction:ltr;text-align:left;overflow-wrap:anywhere"></span></div>
+      <label class="field"><span>اسم المستخدم</span>
+        <input class="input" id="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" dir="ltr" style="text-align:right">
+      </label>
+      <label class="field"><span>كلمة المرور</span>
+        <input class="input" id="password" type="password" autocomplete="current-password" dir="ltr" style="text-align:right">
+      </label>
+      <button class="btn primary lg block" id="btn" type="submit" style="margin-top:6px">دخول</button>
+    </form>
+  </section>
+</main>
+
+<script src="assets/app.js?v=20261004-brand"></script>
+<script>
+const $ = id => document.getElementById(id);
+const go = role => {
+  const map = { super_admin: 'superadmin.html', admin: 'admin.html', collector: 'collector.html', data_entry: 'dataentry.html' };
+  location.replace(map[role] || 'collector.html');
+};
+const showErr = (m, debugError = '') => {
+  $('errText').textContent = debugError ? `خطأ الخادم: ${debugError}` : m;
+  $('errDetail').textContent = '';
+  $('errDetail').classList.add('hide');
+  $('err').classList.remove('hide');
+};
+$('errIcon').innerHTML = M.icon('alert');
+
+// لو فيه جلسة شغالة يدخل على طول
+(async () => {
+  if (!M.token) return;
+  const j = await M.get('me');
+  if (j.success && j.user) { localStorage.setItem('auth_user', JSON.stringify(j.user)); go(j.user.role); }
+  else if (!j.network) { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); }
+})();
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('err').classList.add('hide');
+  const username = $('username').value.trim(), password = $('password').value;
+  if (!username || !password) return showErr('اكتب اسم المستخدم وكلمة المرور');
+  const btn = $('btn');
+  await M.busy(btn, async () => {
+    btn.innerHTML = '<span class="spin"></span> جاري الدخول...';
+    const j = await M.post('login', { username, password });
+    if (j.success && j.token && j.user) {
+      localStorage.setItem('auth_token', j.token);
+      localStorage.setItem('auth_user', JSON.stringify(j.user));
+      return go(j.user.role);
+    }
+    showErr(j.message || 'فشل تسجيل الدخول', j.debug_error || j.sql_error || '');
+  });
+  btn.textContent = 'دخول';
+});
+['username', 'password'].forEach(id => $(id).addEventListener('input', () => $('err').classList.add('hide')));
+</script>
+</body>
+</html>

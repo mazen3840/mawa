@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>مركز عمليات التحصيل</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/mawared-enterprise.css?v=20261004-brand">
+  <script src="assets/mawared-app.js?v=20261004-brand"></script>
+</head>
+<body>
+  <div id="pageContent" hidden>
+    <section class="hero center-hero">
+      <div>
+        <h1>مركز التحصيل والمتابعة</h1>
+        <p>لوحة تشغيل موحدة للحالات ذات الأولوية، التحصيلات التي تنتظر المراجعة، والمتابعات المتأخرة.</p>
+      </div>
+      <div class="center-actions">
+        <a class="btn primary" id="primaryAction" href="collector.html">فتح مساحة العمل</a>
+        <a class="btn" id="secondaryAction" href="operations.html">دورات التحصيل</a>
+        <button class="btn" id="refreshCenter" type="button">تحديث البيانات</button>
+      </div>
+    </section>
+
+    <div class="center-status" id="centerStatus" role="status" aria-live="polite"></div>
+    <section class="grid center-kpis" id="kpis" aria-label="ملخص الأداء"></section>
+
+    <section class="center-panel">
+      <div class="center-panel-head">
+        <div>
+          <h2>حالات العملاء</h2>
+          <p class="muted" id="queueSummary">ابحث بالاسم أو رقم الهاتف، ثم افتح ملف العميل لمراجعة تاريخه.</p>
+        </div>
+        <form class="center-filters" id="queueFilters">
+          <label class="center-search">
+            <span class="sr-only">بحث بالاسم أو الهاتف</span>
+            <input id="queueSearch" type="search" maxlength="100" placeholder="اسم العميل أو رقم الهاتف" autocomplete="off">
+          </label>
+          <label>
+            <span class="sr-only">حالة التحصيل</span>
+            <select id="stageFilter"><option value="">كل المراحل</option></select>
+          </label>
+          <label>
+            <span class="sr-only">التأخير</span>
+            <select id="delayFilter">
+              <option value="">كل الحالات</option>
+              <option value="high">تأخير 30 يومًا فأكثر</option>
+              <option value="overdue">أي تأخير</option>
+              <option value="current">دون تأخير</option>
+            </select>
+          </label>
+          <button class="btn" type="submit">تطبيق</button>
+          <button class="btn ghost" id="clearFilters" type="button">مسح</button>
+        </form>
+      </div>
+      <div class="tablewrap">
+        <table class="table center-table">
+          <thead>
+            <tr><th>العميل</th><th>التأخير</th><th>الرصيد</th><th>المرحلة</th><th>ملف العميل</th></tr>
+          </thead>
+          <tbody id="rows"><tr><td colspan="5" class="empty">جاري تحميل الحالات…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="center-pagination">
+        <span id="pageInfo" class="muted"></span>
+        <div>
+          <button class="btn" id="previousPage" type="button">السابق</button>
+          <button class="btn" id="nextPage" type="button">التالي</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="center-lower">
+      <section class="center-panel">
+        <div class="center-panel-head">
+          <div><h2>آخر إجراءات الفريق</h2><p class="muted">مكالمات وزيارات سجلها الموظفون على عملاء الدورة الحالية.</p></div>
+        </div>
+        <div id="recentActivity" class="list center-list"><div class="empty">جاري تحميل الإجراءات…</div></div>
+      </section>
+      <section class="center-panel">
+        <div class="center-panel-head">
+          <div><h2>متابعات متأخرة</h2><p class="muted">مهام مفتوحة تجاوزت موعدها المحدد.</p></div>
+        </div>
+        <div id="tasks" class="list center-list"><div class="empty">جاري تحميل المتابعات…</div></div>
+      </section>
+      <section class="center-panel">
+        <div class="center-panel-head">
+          <div><h2>تحصيلات بانتظار المراجعة</h2><p class="muted">راجع بيانات التحصيل قبل اعتماده أو رفضه.</p></div>
+        </div>
+        <div id="payments" class="list center-list"><div class="empty">جاري تحميل التحصيلات…</div></div>
+      </section>
+    </div>
+    <p class="center-updated muted" id="lastUpdated"></p>
+  </div>
+  <script src="assets/collection-center.js?v=20261004-linked-actions"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+Options -Indexes
+
+<FilesMatch "(^\.|^(config|db|collection_schema|hosting_config(\.example)?)\.php$|\.((sql)|(bat)|(md)|(log)|(bak)|(ini))$)">
+  Require all denied
+</FilesMatch>

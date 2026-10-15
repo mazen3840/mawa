@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B4A63">
+<title>التقويم — شركة الموارد</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/mawared.css?v=20261004-brand">
+</head>
+<body>
+<div id="bar"></div>
+<main class="wrap calendar-page">
+  <section class="panel calendar-panel">
+    <div class="calendar-heading">
+      <div>
+        <h1>التقويم</h1>
+        <p class="muted small">مواعيدك وتذكيراتك في مكان واحد</p>
+      </div>
+      <button class="btn primary" id="addEvent" type="button"></button>
+    </div>
+    <div class="calendar-controls">
+      <div class="row">
+        <button class="btn icon-btn" id="prevMonth" type="button" aria-label="الشهر السابق"></button>
+        <button class="btn sm" id="todayMonth" type="button">اليوم</button>
+        <button class="btn icon-btn" id="nextMonth" type="button" aria-label="الشهر التالي"></button>
+      </div>
+      <h2 id="monthLabel" aria-live="polite"></h2>
+    </div>
+    <div class="calendar-weekdays" aria-hidden="true">
+      <span>السبت</span><span>الأحد</span><span>الاثنين</span><span>الثلاثاء</span><span>الأربعاء</span><span>الخميس</span><span>الجمعة</span>
+    </div>
+    <div class="calendar-grid" id="calendarGrid" aria-label="أيام الشهر"></div>
+  </section>
+
+  <section class="panel calendar-day-panel">
+    <div class="panel-h">
+      <div>
+        <h2 id="selectedDate"></h2>
+        <small id="dayEventCount"></small>
+      </div>
+      <button class="btn sm" id="addDayEvent" type="button"></button>
+    </div>
+    <div class="panel-b" id="dayEvents" aria-live="polite"></div>
+  </section>
+</main>
+
+<div class="overlay" id="eventOverlay" data-backdrop="1">
+  <form class="sheet" id="eventForm" role="dialog" aria-modal="true" aria-labelledby="eventFormTitle">
+    <div class="sheet-h">
+      <h3 id="eventFormTitle">موعد جديد</h3>
+      <button class="btn quiet icon-btn" id="closeEvent" type="button" aria-label="إغلاق"></button>
+    </div>
+    <div class="sheet-b">
+      <input type="hidden" id="eventId">
+      <label class="field"><span>عنوان الموعد</span><input class="input" id="eventTitle" maxlength="200" required autocomplete="off"></label>
+      <div class="grid2">
+        <label class="field"><span>نوع الموعد</span>
+          <select class="select" id="eventType">
+            <option value="meeting">اجتماع</option>
+            <option value="call">مكالمة</option>
+            <option value="visit">زيارة</option>
+            <option value="reminder">تذكير</option>
+            <option value="other">أخرى</option>
+          </select>
+        </label>
+        <label class="field"><span>التاريخ والوقت</span><input class="input" id="eventStart" type="datetime-local" required></label>
+      </div>
+      <label class="calendar-all-day"><input type="checkbox" id="eventAllDay"><span>موعد طوال اليوم</span></label>
+      <label class="field" style="margin-top:12px"><span>ملاحظات (اختياري)</span><textarea class="textarea" id="eventNote" maxlength="1000" rows="3"></textarea></label>
+    </div>
+    <div class="sheet-f">
+      <button class="btn" id="cancelEvent" type="button">إلغاء</button>
+      <button class="btn primary" id="saveEvent" type="submit">حفظ الموعد</button>
+    </div>
+  </form>
+</div>
+
+<script src="assets/app.js?v=20261004-brand"></script>
+<script>
+if (!M.guard(['collector', 'data_entry', 'admin', 'super_admin'])) throw new Error('auth');
+const $ = id => document.getElementById(id);
+const roleHome = { admin: 'admin.html', super_admin: 'superadmin.html', collector: 'collector.html', data_entry: 'dataentry.html' };
+$('bar').innerHTML = M.appbar({
+  title: M.user.full_name,
+  sub: 'التقويم والمواعيد',
+  actions: `<a class="btn sm" href="${roleHome[M.user.role] || 'collector.html'}">${M.icon('home')} <span>رجوع</span></a>`
+});
+$('addEvent').innerHTML = M.icon('plus') + '<span>موعد جديد</span>';
+$('addDayEvent').innerHTML = M.icon('plus') + '<span>إضافة موعد</span>';
+$('prevMonth').innerHTML = M.icon('down', 'calendar-arrow calendar-arrow-prev');
+$('nextMonth').innerHTML = M.icon('down', 'calendar-arrow calendar-arrow-next');
+$('closeEvent').innerHTML = M.icon('x');
+
+const today = new Date();
+const state = {
+  month: new Date(today.getFullYear(), today.getMonth(), 1),
+  selected: M.today(),
+  events: []
+};
+const typeLabels = { meeting: 'اجتماع', call: 'مكالمة', visit: 'زيارة', reminder: 'تذكير', other: 'موعد' };
+const typeClasses = { meeting: 'meeting', call: 'call', visit: 'visit', reminder: 'reminder', other: 'other' };
+const dateKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const eventDate = e => String(e.start_at || '').slice(0, 10);
+const monthTitle = d => d.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+const fullDate = value => new Date(value + 'T00:00:00').toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const timeLabel = e => Number(e.all_day) ? 'طوال اليوم' : (String(e.start_at || '').slice(11, 16) || '—');
+
+async function loadMonth() {
+  $('monthLabel').textContent = monthTitle(state.month);
+  $('calendarGrid').innerHTML = '<div class="empty calendar-loading"><span class="spin"></span></div>';
+  const month = `${state.month.getFullYear()}-${String(state.month.getMonth() + 1).padStart(2, '0')}`;
+  const result = await M.get('get_calendar_events', { month });
+  if (!result.success) {
+    state.events = [];
+    $('calendarGrid').innerHTML = `<div class="empty calendar-loading">${M.esc(result.message || 'تعذر تحميل التقويم')}</div>`;
+    $('dayEvents').innerHTML = `<div class="empty">${M.esc(result.message || 'تعذر تحميل المواعيد')}</div>`;
+    return;
+  }
+  state.events = result.events || [];
+  if (!state.selected.startsWith(month)) state.selected = dateKey(state.month);
+  renderCalendar();
+  renderDay();
+}
+
+function renderCalendar() {
+  const year = state.month.getFullYear(), month = state.month.getMonth();
+  const first = new Date(year, month, 1), daysInMonth = new Date(year, month + 1, 0).getDate();
+  const offset = (first.getDay() + 1) % 7;
+  const cells = Math.ceil((offset + daysInMonth) / 7) * 7;
+  $('calendarGrid').innerHTML = Array.from({ length: cells }, (_, index) => {
+    const date = new Date(year, month, index - offset + 1);
+    const key = dateKey(date);
+    const events = state.events.filter(event => eventDate(event) === key);
+    const outside = date.getMonth() !== month;
+    const classes = ['calendar-day', outside ? 'outside' : '', key === state.selected ? 'selected' : '', key === M.today() ? 'today' : ''].filter(Boolean).join(' ');
+    return `<button type="button" class="${classes}" data-date="${key}" aria-label="${M.esc(fullDate(key))}${events.length ? `، ${events.length} مواعيد` : ''}" aria-pressed="${key === state.selected}">
+      <span class="calendar-day-number">${date.getDate()}</span>
+      ${events.length ? `<span class="calendar-day-count">${M.num(events.length)}</span>` : '<span class="calendar-day-count empty-count"></span>'}
+      <span class="calendar-day-dots">${events.slice(0, 3).map(event => `<i class="${typeClasses[event.event_type] || 'other'}"></i>`).join('')}</span>
+    </button>`;
+  }).join('');
+}
+
+function renderDay() {
+  const events = state.events.filter(event => eventDate(event) === state.selected);
+  $('selectedDate').textContent = fullDate(state.selected);
+  $('dayEventCount').textContent = events.length ? `${M.num(events.length)} مواعيد` : 'لا توجد مواعيد';
+  if (!events.length) {
+    $('dayEvents').innerHTML = `<div class="empty calendar-empty">${M.icon('calendar')}لا توجد مواعيد في هذا اليوم</div>`;
+    return;
+  }
+  $('dayEvents').innerHTML = `<div class="calendar-event-list">${events.map(event => {
+    const type = typeClasses[event.event_type] || 'other';
+    const done = event.status === 'done';
+    return `<article class="calendar-event ${done ? 'is-done' : ''}">
+      <span class="calendar-event-mark ${type}" aria-hidden="true"></span>
+      <div class="calendar-event-main">
+        <div class="calendar-event-top"><span class="calendar-event-time">${M.esc(timeLabel(event))}</span><span class="calendar-type ${type}">${M.esc(typeLabels[event.event_type] || typeLabels.other)}</span>${done ? '<span class="tag ok">تم</span>' : ''}</div>
+        <h3>${M.esc(event.title)}</h3>
+        ${event.note ? `<p>${M.esc(event.note)}</p>` : ''}
+        ${event.assigned_name ? `<small class="muted">المسؤول: ${M.esc(event.assigned_name)}</small>` : ''}
+      </div>
+      <div class="calendar-event-actions">
+        <button class="btn quiet icon-btn" type="button" data-toggle-event="${Number(event.id)}" title="${done ? 'إعادة فتح الموعد' : 'إنهاء الموعد'}" aria-label="${done ? 'إعادة فتح الموعد' : 'إنهاء الموعد'}">${M.icon(done ? 'refresh' : 'check')}</button>
+        <button class="btn quiet icon-btn" type="button" data-edit-event="${Number(event.id)}" title="تعديل الموعد" aria-label="تعديل الموعد">${M.icon('edit')}</button>
+        <button class="btn quiet icon-btn" type="button" data-delete-event="${Number(event.id)}" title="حذف الموعد" aria-label="حذف الموعد">${M.icon('trash')}</button>
+      </div>
+    </article>`;
+  }).join('')}</div>`;
+}
+
+function openEvent(event = null) {
+  $('eventFormTitle').textContent = event ? 'تعديل الموعد' : 'موعد جديد';
+  $('eventId').value = event ? event.id : '';
+  $('eventTitle').value = event ? event.title : '';
+  $('eventType').value = event ? (event.event_type || 'other') : 'meeting';
+  $('eventStart').value = event ? String(event.start_at).replace(' ', 'T').slice(0, 16) : `${state.selected}T09:00`;
+  $('eventAllDay').checked = event ? Number(event.all_day) === 1 : false;
+  $('eventStart').disabled = $('eventAllDay').checked;
+  $('eventNote').value = event ? (event.note || '') : '';
+  M.open('eventOverlay');
+  $('eventTitle').focus();
+}
+
+function closeEvent() { M.close('eventOverlay'); }
+
+document.querySelectorAll('#prevMonth, #nextMonth').forEach(button => button.addEventListener('click', () => {
+  state.month.setMonth(state.month.getMonth() + (button.id === 'nextMonth' ? 1 : -1));
+  loadMonth();
+}));
+$('todayMonth').addEventListener('click', () => {
+  const now = new Date();
+  state.month = new Date(now.getFullYear(), now.getMonth(), 1);
+  state.selected = M.today();
+  loadMonth();
+});
+$('calendarGrid').addEventListener('click', event => {
+  const day = event.target.closest('[data-date]');
+  if (!day) return;
+  state.selected = day.dataset.date;
+  const date = new Date(state.selected + 'T00:00:00');
+  if (date.getMonth() !== state.month.getMonth()) state.month = new Date(date.getFullYear(), date.getMonth(), 1);
+  renderCalendar();
+  renderDay();
+});
+[$('addEvent'), $('addDayEvent')].forEach(button => button.addEventListener('click', () => openEvent()));
+[$('closeEvent'), $('cancelEvent')].forEach(button => button.addEventListener('click', closeEvent));
+$('eventOverlay').addEventListener('click', event => { if (event.target === $('eventOverlay')) closeEvent(); });
+$('eventAllDay').addEventListener('change', () => {
+  const date = ($('eventStart').value || `${state.selected}T09:00`).slice(0, 10);
+  if ($('eventAllDay').checked) $('eventStart').value = `${date}T00:00`;
+  else if ($('eventStart').value.slice(11, 16) === '00:00') $('eventStart').value = `${date}T09:00`;
+  $('eventStart').disabled = $('eventAllDay').checked;
+});
+$('eventForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('saveEvent');
+  await M.busy(button, async () => {
+    const startAt = $('eventAllDay').checked
+      ? `${($('eventStart').value || `${state.selected}T00:00`).slice(0, 10)}T00:00`
+      : $('eventStart').value;
+    const result = await M.post('save_calendar_event', {
+      id: $('eventId').value ? Number($('eventId').value) : undefined,
+      title: $('eventTitle').value.trim(),
+      event_type: $('eventType').value,
+      start_at: startAt,
+      all_day: $('eventAllDay').checked ? 1 : 0,
+      note: $('eventNote').value.trim()
+    });
+    if (!result.success) return M.err(result.message || 'تعذر حفظ الموعد');
+    state.selected = startAt.slice(0, 10);
+    const date = new Date(state.selected + 'T00:00:00');
+    state.month = new Date(date.getFullYear(), date.getMonth(), 1);
+    closeEvent();
+    M.toast(result.message || 'تم حفظ الموعد');
+    await loadMonth();
+  });
+});
+$('dayEvents').addEventListener('click', async event => {
+  const toggle = event.target.closest('[data-toggle-event]');
+  const edit = event.target.closest('[data-edit-event]');
+  const remove = event.target.closest('[data-delete-event]');
+  if (toggle) {
+    const result = await M.post('complete_calendar_event', { id: Number(toggle.dataset.toggleEvent) });
+    if (!result.success) return M.err(result.message || 'تعذر تحديث الموعد');
+    await loadMonth();
+  } else if (edit) {
+    const item = state.events.find(candidate => Number(candidate.id) === Number(edit.dataset.editEvent));
+    if (item) openEvent(item);
+  } else if (remove) {
+    if (!await M.confirm('حذف هذا الموعد من التقويم؟', { danger: true, ok: 'حذف' })) return;
+    const result = await M.post('delete_calendar_event', { id: Number(remove.dataset.deleteEvent) });
+    if (!result.success) return M.err(result.message || 'تعذر حذف الموعد');
+    M.toast(result.message || 'تم حذف الموعد');
+    await loadMonth();
+  }
+});
+loadMonth();
+</script>
+</body>
+</html>

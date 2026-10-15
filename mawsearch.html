@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>البحث برقم الهاتف — أداة OSINT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #6366f1;
+    --primary-dark: #4f46e5;
+    --primary-light: #818cf8;
+    --accent: #06b6d4;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --bg: #0f172a;
+    --bg-soft: #1e293b;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-soft: #64748b;
+    --text-muted: #94a3b8;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow: 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-lg: 0 20px 40px rgba(0,0,0,0.1);
+    --radius: 14px;
+    --radius-sm: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+    background: var(--surface-2);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 20% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 80% 100%, rgba(6, 182, 212, 0.06) 0%, transparent 40%);
+  }
+
+  .app-header {
+    background: linear-gradient(135deg, var(--bg) 0%, var(--bg-soft) 100%);
+    color: #fff;
+    padding: 20px 0;
+    box-shadow: var(--shadow);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-icon {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+    border-radius: 12px;
+    display: grid; place-items: center;
+    font-size: 20px;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  }
+  .brand-text h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .brand-text p { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+  .header-badge {
+    background: rgba(16, 185, 129, 0.15);
+    color: #6ee7b7;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .pulse-dot {
+    width: 8px; height: 8px;
+    background: #10b981;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  .hero { text-align: center; margin-bottom: 36px; }
+  .hero h2 {
+    font-size: 32px; font-weight: 800;
+    color: var(--text); margin-bottom: 10px;
+    letter-spacing: -0.5px;
+  }
+  .hero h2 span {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero p { color: var(--text-soft); font-size: 15px; max-width: 600px; margin: 0 auto; }
+
+  .search-box {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .input-group { display: flex; gap: 12px; flex-wrap: wrap; }
+  .input-wrapper { flex: 1; min-width: 260px; position: relative; }
+  .input-wrapper .flag {
+    position: absolute; right: 16px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 20px; pointer-events: none;
+  }
+  .input-wrapper input {
+    width: 100%;
+    padding: 16px 56px 16px 18px;
+    font-size: 17px;
+    font-family: inherit;
+    font-weight: 600;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: all 0.2s;
+    background: var(--surface-2);
+    color: var(--text);
+    letter-spacing: 1px;
+    direction: ltr;
+    text-align: right;
+  }
+  .input-wrapper input::placeholder {
+    color: var(--text-muted);
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  .input-wrapper input:focus {
+    border-color: var(--primary);
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+  }
+  .btn {
+    padding: 16px 32px;
+    font-size: 16px;
+    font-family: inherit;
+    font-weight: 700;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    white-space: nowrap;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+  }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-secondary {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: #eef2f7; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-soft);
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+  .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+
+  .quick-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .hint-text {
+    color: var(--text-muted);
+    font-size: 13px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hint-text kbd {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: monospace;
+    font-weight: 600;
+  }
+
+  .status-banner {
+    padding: 16px 20px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 24px;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    animation: slideDown 0.3s ease;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .status-banner.show { display: flex; }
+  .status-banner.loading {
+    background: linear-gradient(90deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e40af;
+    border-right: 4px solid #3b82f6;
+  }
+  .status-banner.error {
+    background: #fef2f2;
+    color: #991b1b;
+    border-right: 4px solid var(--danger);
+  }
+  .status-banner.success {
+    background: #f0fdf4;
+    color: #14532d;
+    border-right: 4px solid var(--success);
+  }
+  .status-banner.warning {
+    background: #fffbeb;
+    color: #78350f;
+    border-right: 4px solid var(--warning);
+  }
+
+  .spinner {
+    width: 22px; height: 22px;
+    border: 3px solid rgba(59, 130, 246, 0.2);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .progress-container {
+    background: var(--surface);
+    padding: 20px;
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+    display: none;
+  }
+  .progress-container.show { display: block; }
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-soft);
+  }
+  .progress-bar {
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+    width: 0%;
+    position: relative;
+  }
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .platform-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip {
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.3s;
+  }
+  .chip.done { background: #f0fdf4; color: #15803d; }
+  .chip.searching {
+    background: #eff6ff;
+    color: #1e40af;
+    animation: pulseChip 1s infinite;
+  }
+  .chip.failed { background: #fef2f2; color: #991b1b; }
+  @keyframes pulseChip {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+    display: none;
+  }
+  .stats-grid.show { display: grid; }
+  .stat-card {
+    background: var(--surface);
+    padding: 18px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+  .stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+  .stat-value.primary { color: var(--primary); }
+  .stat-value.success { color: var(--success); }
+
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .results-title {
+    font-size: 18px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .results-title .count-pill {
+    background: var(--primary);
+    color: #fff;
+    font-size: 13px;
+    padding: 2px 12px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
+  .results-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .result-card {
+    background: var(--surface);
+    padding: 20px 22px;
+    margin-bottom: 12px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.4s ease backwards;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .result-card::before {
+    content: '';
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--primary) 0%, var(--accent) 100%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .result-card:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+    border-color: var(--primary-light);
+  }
+  .result-card:hover::before { opacity: 1; }
+
+  .result-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .platform-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(6, 182, 212, 0.1) 100%);
+    color: var(--primary-dark);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+  }
+  .result-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  .result-title a { color: inherit; text-decoration: none; transition: color 0.2s; }
+  .result-title a:hover { color: var(--primary); }
+  .result-snippet {
+    font-size: 14px;
+    color: var(--text-soft);
+    line-height: 1.7;
+    margin-bottom: 10px;
+  }
+  .result-url {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    word-break: break-all;
+    font-family: 'Courier New', monospace;
+    background: var(--surface-2);
+    padding: 6px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    direction: ltr;
+    text-align: left;
+  }
+  .result-url a { color: inherit; text-decoration: none; }
+  .result-url a:hover { color: var(--primary); }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 24px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 2px dashed var(--border);
+  }
+  .empty-state .emoji { font-size: 56px; margin-bottom: 16px; display: block; }
+  .empty-state h3 { font-size: 18px; color: var(--text); margin-bottom: 8px; }
+  .empty-state p {
+    color: var(--text-soft);
+    font-size: 14px;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  .app-footer {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--text-muted);
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+  .app-footer strong { color: var(--text-soft); }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background: var(--bg);
+    color: #fff;
+    padding: 14px 22px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+    font-weight: 600;
+    font-size: 14px;
+    z-index: 999;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.success { background: var(--success); }
+  .toast.error { background: var(--danger); }
+
+  .settings-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 20px;
+  }
+  .settings-modal.show { display: flex; }
+  .settings-box {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 28px;
+    max-width: 500px;
+    width: 100%;
+    box-shadow: var(--shadow-lg);
+    animation: fadeUp 0.3s ease;
+  }
+  .settings-box h3 { font-size: 20px; margin-bottom: 8px; color: var(--text); }
+  .settings-box .desc {
+    font-size: 14px;
+    color: var(--text-soft);
+    margin-bottom: 20px;
+  }
+  .settings-box label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-soft);
+    margin-bottom: 6px;
+    margin-top: 14px;
+  }
+  .settings-box input {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-family: inherit;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color 0.2s;
+    background: var(--surface-2);
+    color: var(--text);
+    direction: ltr;
+    text-align: left;
+  }
+  .settings-box input:focus { border-color: var(--primary); background: #fff; }
+  .settings-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 22px;
+    justify-content: flex-end;
+  }
+  .icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: all 0.2s;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+  @media (max-width: 640px) {
+    .hero h2 { font-size: 24px; }
+    .container { padding: 24px 16px 60px; }
+    .search-box { padding: 18px; }
+    .btn { width: 100%; }
+    .input-wrapper { min-width: 100%; }
+    .header-inner { padding: 0 16px; }
+    .brand-text p { display: none; }
+    .header-badge { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-icon">🔍</div>
+      <div class="brand-text">
+        <h1>البحث برقم الهاتف</h1>
+        <p>أداة OSINT لفحص الأرقام</p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="header-badge">
+        <span class="pulse-dot"></span>
+        <span id="statusLabel">جاهز</span>
+      </div>
+      <button class="icon-btn" onclick="openSettings()" title="الإعدادات">⚙️</button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="hero">
+    <h2>اكتشف <span>حساباتك المرتبطة</span> برقم هاتفك</h2>
+    <p>اكتب رقمك وهنبحث عنه في أشهر منصات التواصل الاجتماعي والمحركات. كل النتائج مجمعة في مكان واحد.</p>
+  </section>
+
+  <section class="search-box">
+    <div class="input-group">
+      <div class="input-wrapper">
+        <input type="tel" id="phoneInput" placeholder="01xxxxxxxxx" autocomplete="off" inputmode="tel" />
+        <span class="flag" id="flagIcon">🇪🇬</span>
+      </div>
+      <button class="btn btn-primary" id="searchBtn" onclick="startSearch()">
+        <span>🔎</span>
+        <span>ابحث الآن</span>
+      </button>
+    </div>
+    <div class="quick-actions">
+      <div class="hint-text">💡 اضغط <kbd>Enter</kbd> للبحث السريع</div>
+      <div class="hint-text">🔒 البحث محلي وآمن — بياناتك مش بتتخزن</div>
+    </div>
+  </section>
+
+  <div class="status-banner" id="statusBanner"></div>
+
+  <div class="progress-container" id="progressContainer">
+    <div class="progress-header">
+      <span>⏳ جاري البحث في المنصات...</span>
+      <span id="progressPercent">0%</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="platform-chips" id="platformChips"></div>
+  </div>
+
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-label">إجمالي النتائج</div>
+      <div class="stat-value primary" id="statTotal">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">منصات فيها نتائج</div>
+      <div class="stat-value success" id="statPlatforms">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">المنصات المفحوصة</div>
+      <div class="stat-value" id="statScanned">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">مدة البحث</div>
+      <div class="stat-value" id="statDuration">0s</div>
+    </div>
+  </div>
+
+  <section id="resultsSection"></section>
+
+</main>
+
+<footer class="app-footer">
+  <p>صُنع بـ <strong>HTML + JavaScript</strong> — كل العمليات بتحصل على جهازك</p>
+  <p style="margin-top:6px">استخدم الأداة دي لأرقامك الشخصية أو الأرقام اللي عندك تفويض بفحصها فقط</p>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<div class="settings-modal" id="settingsModal">
+  <div class="settings-box">
+    <h3>⚙️ إعدادات الأداة</h3>
+    <p class="desc">ضيف مفتاح LangSearch API وكود الدولة بتاعك. الإعدادات بتُحفظ في المتصفح بتاعك فقط.</p>
+
+    <label for="apiKeyInput">LangSearch API Key</label>
+    <input type="password" id="apiKeyInput" placeholder="الصق المفتاح هنا" autocomplete="off" />
+
+    <label for="countryCodeInput">كود الدولة (بدون +)</label>
+    <input type="text" id="countryCodeInput" placeholder="20" value="20" maxlength="4" />
+
+    <div class="settings-actions">
+      <button class="btn btn-secondary btn-ghost" onclick="closeSettings()">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveSettings()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================
+// الإعدادات الافتراضية
+// ============================================
+const DEFAULT_CONFIG = {
+  // ⚠️ المفتاح اللي بعتهولي — لازم تعمله Revoke بعد التجربة
+  API_KEY: 'api-key-2026092707164577726',
+  COUNTRY_CODE: '20',
+  RESULTS_PER_PLATFORM: 5,
+  PLATFORMS: [
+    { name: 'Facebook',    domain: 'facebook.com',    icon: '📘' },
+    { name: 'Instagram',   domain: 'instagram.com',   icon: '📸' },
+    { name: 'Twitter / X', domain: 'twitter.com OR x.com', icon: '🐦' },
+    { name: 'LinkedIn',    domain: 'linkedin.com',    icon: '💼' },
+    { name: 'Telegram',    domain: 't.me',            icon: '✈️' },
+    { name: 'WhatsApp',    domain: 'wa.me OR whatsapp.com', icon: '💬' },
+    { name: 'TikTok',      domain: 'tiktok.com',      icon: '🎵' },
+    { name: 'Pinterest',   domain: 'pinterest.com',   icon: '📌' },
+    { name: 'Snapchat',    domain: 'snapchat.com',    icon: '👻' },
+    { name: 'YouTube',     domain: 'youtube.com',     icon: '▶️' },
+    { name: 'Reddit',      domain: 'reddit.com',      icon: '🔴' },
+    { name: 'GitHub',      domain: 'github.com',      icon: '💻' }
+  ]
+};
+
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('phoneSearchConfig') || '{}');
+    return {
+      ...DEFAULT_CONFIG,
+      ...saved,
+      PLATFORMS: DEFAULT_CONFIG.PLATFORMS
+    };
+  } catch {
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
+window.APP_CONFIG = loadConfig();
+
+// ============================================
+// المتغيرات العامة
+// ============================================
+let isSearching = false;
+let searchStartTime = 0;
+let lastResults = [];
+
+// ============================================
+// أدوات مساعدة
+// ============================================
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = 'toast show ' + type;
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function setStatus(type, message, showSpinner = false) {
+  const banner = document.getElementById('statusBanner');
+  banner.className = 'status-banner show ' + type;
+  banner.innerHTML = (showSpinner ? '<div class="spinner"></div>' : '') +
+                     '<span>' + message + '</span>';
+}
+
+function hideStatus() {
+  document.getElementById('statusBanner').className = 'status-banner';
+}
+
+function updateHeaderStatus(text) {
+  document.getElementById('statusLabel').textContent = text;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ============================================
+// الإعدادات
+// ============================================
+function openSettings() {
+  document.getElementById('apiKeyInput').value = window.APP_CONFIG.API_KEY || '';
+  document.getElementById('countryCodeInput').value = window.APP_CONFIG.COUNTRY_CODE || '20';
+  document.getElementById('settingsModal').classList.add('show');
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('show');
+}
+
+function saveSettings() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  const cc = document.getElementById('countryCodeInput').value.trim() || '20';
+
+  window.APP_CONFIG.API_KEY = key;
+  window.APP_CONFIG.COUNTRY_CODE = cc;
+
+  localStorage.setItem('phoneSearchConfig', JSON.stringify({
+    API_KEY: key,
+    COUNTRY_CODE: cc
+  }));
+
+  closeSettings();
+  showToast('✅ تم حفظ الإعدادات', 'success');
+  setStatus('success', '✅ الإعدادات اتحفظت — اكتب رقمك وابدأ البحث');
+  setTimeout(hideStatus, 2500);
+}
+
+// ============================================
+// تحويل الرقم لكل الصيغ
+// ============================================
+function normalizePhone(phone) {
+  const cc = window.APP_CONFIG.COUNTRY_CODE || '20';
+  const digits = phone.replace(/\D/g, '');
+  let local = digits;
+
+  if (digits.startsWith('00' + cc)) {
+    local = '0' + digits.slice(4);
+  } else if (digits.startsWith(cc) && digits.length > 10) {
+    local = '0' + digits.slice(2);
+  }
+
+  if (!local.startsWith('0')) {
+    local = '0' + local;
+  }
+
+  const intl = cc + local.slice(1);
+  const variants = [local, intl, '+' + intl, '00' + intl];
+
+  if (local.length >= 11) {
+    variants.push(local.replace(/(\d{4})(\d{3})(\d{4})/, '$1 $2 $3'));
+    variants.push(local.replace(/(\d{4})(\d{3})(\d{4})/, '$1-$2-$3'));
+  }
+
+  return [...new Set(variants)];
+}
+
+function buildQuery(variants) {
+  return variants.map(v => `"${v}"`).join(' OR ');
+}
+
+// ============================================
+// البحث في منصة واحدة
+// ============================================
+async function searchPlatform(platform, query) {
+  const apiKey = window.APP_CONFIG.API_KEY;
+  const count = window.APP_CONFIG.RESULTS_PER_PLATFORM || 5;
+
+  const fullQuery = `site:${platform.domain} (${query})`;
+  const url = 'https://api.langsearch.com/v1/web-search';
+
+  try {
+    // ✅ POST مع body بالشكل الصحيح
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query: fullQuery,
+        freshness: 'noLimit',
+        summary: false,
+        count: count
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.error(`[${platform.name}] HTTP ${response.status}:`, errText.substring(0, 300));
+      throw new Error('HTTP_' + response.status);
+    }
+
+    const data = await response.json();
+
+    // ✅ النتائج بتيجي في data.data.webPages.value
+    let items = [];
+    if (data.data && data.data.webPages && Array.isArray(data.data.webPages.value)) {
+      items = data.data.webPages.value;
+    } else if (data.webPages && Array.isArray(data.webPages.value)) {
+      items = data.webPages.value;
+    } else if (Array.isArray(data.data)) {
+      items = data.data;
+    } else if (data.results && Array.isArray(data.results)) {
+      items = data.results;
+    }
+
+    return items.map(item => ({
+      platform: platform.name,
+      icon: platform.icon,
+      title: item.name || item.title || item.headline || 'بدون عنوان',
+      url: item.url || item.link || item.href || '',
+      snippet: item.snippet || item.summary || item.description || ''
+    })).filter(r => r.url);
+
+  } catch (err) {
+    console.warn(`[${platform.name}] فشل:`, err.message);
+    throw err;
+  }
+}
+
+// ============================================
+// شريط التقدم
+// ============================================
+function renderPlatformChips(platforms) {
+  const container = document.getElementById('platformChips');
+  container.innerHTML = platforms.map(p =>
+    `<span class="chip" data-platform="${p.name}">${p.icon} ${p.name}</span>`
+  ).join('');
+}
+
+function markChipStatus(platformName, status) {
+  const chip = document.querySelector(`.chip[data-platform="${platformName}"]`);
+  if (!chip) return;
+  chip.classList.remove('searching', 'done', 'failed');
+  if (status) chip.classList.add(status);
+}
+
+function updateProgress(done, total) {
+  const percent = Math.round((done / total) * 100);
+  document.getElementById('progressFill').style.width = percent + '%';
+  document.getElementById('progressPercent').textContent = percent + '%';
+}
+
+// ============================================
+// عرض النتائج
+// ============================================
+function renderResults(results, duration) {
+  const section = document.getElementById('resultsSection');
+
+  if (results.length === 0) {
+    section.innerHTML = `
+      <div class="empty-state">
+        <span class="emoji">🔍</span>
+        <h3>مفيش نتائج ظاهرة</h3>
+        <p>ممكن الرقم مش مربوط بحسابات عامة، أو إعدادات الخصوصية عندك بتمنع ظهوره في محركات البحث.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const byPlatform = {};
+  results.forEach(r => {
+    if (!byPlatform[r.platform]) byPlatform[r.platform] = [];
+    byPlatform[r.platform].push(r);
+  });
+
+  const platformCount = Object.keys(byPlatform).length;
+
+  document.getElementById('statTotal').textContent = results.length;
+  document.getElementById('statPlatforms').textContent = platformCount;
+  document.getElementById('statScanned').textContent = window.APP_CONFIG.PLATFORMS.length;
+  document.getElementById('statDuration').textContent = duration + 's';
+  document.getElementById('statsGrid').classList.add('show');
+
+  let html = `
+    <div class="results-header">
+      <div class="results-title">
+        <span>📊 النتائج</span>
+        <span class="count-pill">${results.length}</span>
+      </div>
+      <div class="results-actions">
+        <button class="btn btn-secondary btn-ghost" onclick="exportResults()">📥 تصدير JSON</button>
+        <button class="btn btn-secondary btn-ghost" onclick="copyAllLinks()">🔗 نسخ الروابط</button>
+      </div>
+    </div>
+  `;
+
+  let cardIndex = 0;
+  results.forEach(r => {
+    const delay = Math.min(cardIndex * 40, 600);
+    cardIndex++;
+    html += `
+      <div class="result-card" style="animation-delay: ${delay}ms">
+        <div class="result-top">
+          <span class="platform-tag">${r.icon} ${r.platform}</span>
+        </div>
+        <div class="result-title">
+          <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.title)}</a>
+        </div>
+        ${r.snippet ? `<div class="result-snippet">${escapeHtml(r.snippet)}</div>` : ''}
+        <div class="result-url">
+          <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>
+        </div>
+      </div>
+    `;
+  });
+
+  section.innerHTML = html;
+}
+
+// ============================================
+// البحث الرئيسي
+// ============================================
+async function startSearch() {
+  if (isSearching) return;
+
+  const phone = document.getElementById('phoneInput').value.trim();
+  const searchBtn = document.getElementById('searchBtn');
+  const resultsSection = document.getElementById('resultsSection');
+
+  if (!phone) {
+    setStatus('error', '⚠️ اكتب رقم الهاتف الأول');
+    return;
+  }
+
+  const digitsOnly = phone.replace(/\D/g, '');
+  if (digitsOnly.length < 8 || digitsOnly.length > 15) {
+    setStatus('error', '⚠️ الرقم غير صحيح — تأكد من عدد الأرقام');
+    return;
+  }
+
+  if (!window.APP_CONFIG.API_KEY) {
+    setStatus('error', '⚠️ مفتاح API مش موجود — اضغط على ⚙️ في الأعلى وضيفه');
+    openSettings();
+    return;
+  }
+
+  isSearching = true;
+  searchStartTime = Date.now();
+  searchBtn.disabled = true;
+  searchBtn.innerHTML = '<div class="spinner" style="border:3px solid rgba(255,255,255,0.3);border-top-color:#fff"></div><span>جاري البحث...</span>';
+  resultsSection.innerHTML = '';
+  document.getElementById('statsGrid').classList.remove('show');
+  updateHeaderStatus('جاري البحث...');
+
+  const variants = normalizePhone(phone);
+  const query = buildQuery(variants);
+  const platforms = window.APP_CONFIG.PLATFORMS;
+
+  document.getElementById('progressContainer').classList.add('show');
+  renderPlatformChips(platforms);
+  updateProgress(0, platforms.length);
+
+  setStatus('loading', `🔎 بيدور على الرقم في ${platforms.length} منصة...`, true);
+
+  let completed = 0;
+  let failedCount = 0;
+  const allResults = [];
+
+  const promises = platforms.map(async (platform) => {
+    markChipStatus(platform.name, 'searching');
+    try {
+      const results = await searchPlatform(platform, query);
+      allResults.push(...results);
+      markChipStatus(platform.name, 'done');
+    } catch (err) {
+      markChipStatus(platform.name, 'failed');
+      failedCount++;
+    } finally {
+      completed++;
+      updateProgress(completed, platforms.length);
+    }
+  });
+
+  await Promise.allSettled(promises);
+
+  const unique = Array.from(
+    new Map(allResults.map(r => [r.url, r])).values()
+  );
+
+  lastResults = unique;
+  const duration = ((Date.now() - searchStartTime) / 1000).toFixed(1);
+
+  document.getElementById('progressContainer').classList.remove('show');
+  searchBtn.disabled = false;
+  searchBtn.innerHTML = '<span>🔎</span><span>ابحث الآن</span>';
+  isSearching = false;
+
+  // لو كل المنصات فشلت
+  if (failedCount === platforms.length && unique.length === 0) {
+    setStatus('error', '❌ كل المنصات فشلت — افتح F12 → Console وشوف الخطأ، غالباً المفتاح غلط أو الـ endpoint اتغير');
+    updateHeaderStatus('فشل');
+    showToast('❌ فشل البحث في كل المنصات', 'error');
+    return;
+  }
+
+  if (unique.length === 0) {
+    setStatus('warning', '✅ البحث خلص — مفيش نتائج ظاهرة');
+    updateHeaderStatus('مفيش نتائج');
+  } else {
+    setStatus('success', `✅ البحث خلص — لقينا ${unique.length} نتيجة في ${duration} ثانية`);
+    updateHeaderStatus(`${unique.length} نتيجة`);
+  }
+
+  renderResults(unique, duration);
+  showToast(`✅ البحث اكتمل — ${unique.length} نتيجة`, 'success');
+}
+
+// ============================================
+// أدوات النتائج
+// ============================================
+function exportResults() {
+  if (!lastResults.length) return;
+  const data = {
+    exportedAt: new Date().toISOString(),
+    totalResults: lastResults.length,
+    results: lastResults
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `phone-search-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📥 تم تصدير النتائج', 'success');
+}
+
+function copyAllLinks() {
+  if (!lastResults.length) return;
+  const links = lastResults.map(r => r.url).join('\n');
+  navigator.clipboard.writeText(links).then(() => {
+    showToast('🔗 تم نسخ كل الروابط', 'success');
+  }).catch(() => {
+    showToast('❌ فشل النسخ', 'error');
+  });
+}
+
+// ============================================
+// الأحداث
+// ============================================
+document.getElementById('phoneInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') startSearch();
+});
+
+document.getElementById('settingsModal').addEventListener('click', e => {
+  if (e.target.id === 'settingsModal') closeSettings();
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (!window.APP_CONFIG.API_KEY) {
+    setStatus('warning', '⚠️ مفتاح API مش موجود — اضغط على ⚙️ في الأعلى وضيفه');
+    setTimeout(() => openSettings(), 800);
+  } else {
+    setStatus('success', '✅ الأداة جاهزة — اكتب رقمك واضغط "ابحث"');
+    setTimeout(hideStatus, 3000);
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B4A63">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="موارد">
+<meta name="application-name" content="موارد">
+<meta name="msapplication-TileColor" content="#0B4A63">
+<meta name="msapplication-TileImage" content="assets/icons/icon-144.png">
+
+<title>لوحة السوبر أدمن — شركة الموارد</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/mawared.css?v=20261004-brand">
+</head>
+<body>
+<div id="bar"></div>
+<main class="wrap">
+  <nav class="tabs" id="tabs" role="tablist">
+    <button class="tab" data-tab="live" type="button" id="tLive"></button>
+    <button class="tab" data-tab="perf" type="button" id="tPerf"></button>
+    <button class="tab" data-tab="visits" type="button" id="tVisits"></button>
+    <button class="tab" data-tab="calls" type="button" id="tCalls"></button>
+    <button class="tab" data-tab="ops" type="button" id="tOps"></button>
+    <button class="tab" data-tab="products" type="button" id="tProducts"></button>
+    <button class="tab" data-tab="users" type="button" id="tUsers"></button>
+    <button class="tab" data-tab="sheets" type="button" id="tSheets"></button>
+  </nav>
+  <section class="tabpane" id="pane-live"></section>
+  <section class="tabpane" id="pane-perf"></section>
+  <section class="tabpane" id="pane-visits"></section>
+  <section class="tabpane" id="pane-calls"></section>
+  <section class="tabpane" id="pane-ops"></section>
+  <section class="tabpane" id="pane-products"></section>
+  <section class="tabpane" id="pane-users"></section>
+  <section class="tabpane" id="pane-sheets"></section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="assets/app.js?v=20261004-brand"></script>
+<script src="assets/admin-common.js?v=20261004-assigned-clients"></script>
+<script>
+if (!M.guard(['super_admin'])) throw new Error('auth');
+const IS_SUPER = true;
+document.getElementById('bar').innerHTML = M.appbar({
+  title: M.user.full_name, sub: 'لوحة السوبر أدمن — كل الفرق',
+  actions: `<a class="btn sm" href="operations.html">${M.icon('briefcase')} <span>دورات التحصيل</span></a><a class="btn sm" href="dataentry.html">${M.icon('plus')} <span>إدخال الزيارات</span></a><a class="btn sm" href="collector.html">${M.icon('phone')} <span>شغلي</span></a>`
+});
+const T = { tLive: ['pulse', 'لايف'], tPerf: ['chart', 'الأداء'], tVisits: ['pin', 'الزيارات'], tCalls: ['phone', 'المكالمات'], tOps: ['check', 'أهداف ومهام'], tProducts: ['briefcase', 'المنتجات'], tUsers: ['users', 'المستخدمون'], tSheets: ['file', 'الشيتات'] };
+Object.entries(T).forEach(([id, [ic, t]]) => document.getElementById(id).innerHTML = M.icon(ic) + '<span>' + t + '</span>');
+
+(async () => {
+  if (IS_SUPER) await A.loadAdmins();
+  const opt = { isSuper: IS_SUPER };
+  const W = {
+    live: A.liveTab(document.getElementById('pane-live'), opt),
+    perf: A.perfTab(document.getElementById('pane-perf'), opt),
+    visits: A.visitsTab(document.getElementById('pane-visits'), opt),
+    calls: A.callsTab(document.getElementById('pane-calls'), opt),
+    ops: A.opsTab(document.getElementById('pane-ops'), opt),
+    products: A.productsTab(document.getElementById('pane-products')),
+    users: A.usersTab(document.getElementById('pane-users'), opt),
+    sheets: A.sheetsTab(document.getElementById('pane-sheets'))
+  };
+  M.tabs(document.getElementById('tabs'), name => W[name].load());
+})();
+</script>
+</body>
+</html>

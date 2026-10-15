@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B4A63">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="موارد">
+<meta name="application-name" content="موارد">
+<meta name="msapplication-TileColor" content="#0B4A63">
+<meta name="msapplication-TileImage" content="assets/icons/icon-144.png">
+
+<title>شغلي — شركة الموارد</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/mawared.css?v=20261004-brand">
+</head>
+<body class="has-tabbar">
+<div id="bar"></div>
+
+<main class="wrap narrow">
+  <div id="dailyTargetBox"></div>
+  <div id="myTasksBox"></div>
+  <div id="collectionCycleBox"></div>
+  <nav class="tabbar" id="tabs" aria-label="أقسام الصفحة">
+    <button data-tab="visits" type="button" id="tVisits"></button>
+    <button data-tab="clients" type="button" id="tClients"></button>
+  </nav>
+
+  <!-- ============ الزيارات ============ -->
+  <section class="tabpane" id="pane-visits">
+    <div class="kpis day" id="vStats">
+      <div class="kpi"><small>زيارات اليوم</small><b id="kTotal">0</b></div>
+      <div class="kpi"><small>تمت</small><b class="ok" id="kDone">0</b></div>
+      <div class="kpi"><small>متبقية</small><b class="warn" id="kPend">0</b></div>
+    </div>
+    <div class="chips" id="vChips">
+      <button class="chip on" data-f="today" type="button">النهارده</button>
+      <button class="chip" data-f="overdue" type="button" id="chOver">متأخرة</button>
+      <button class="chip" data-f="done" type="button">تمت</button>
+      <button class="chip" data-f="all" type="button">الكل</button>
+    </div>
+    <div id="vList"></div>
+  </section>
+
+  <!-- ============ العملاء ============ -->
+  <section class="tabpane" id="pane-clients">
+    <div class="kpis day">
+      <div class="kpi"><small>اتصلت النهارده</small><b id="cTotal">0</b></div>
+      <div class="kpi"><small>تواصل ناجح</small><b class="ok" id="cOk">0</b></div>
+      <div class="kpi"><small>باقي عليك</small><b class="warn" id="cLeft">0</b></div>
+    </div>
+    <div class="row nowrap" style="margin-bottom:10px">
+      <input class="input grow" id="q" type="search" placeholder="بحث: اسم / تليفون" autocomplete="off">
+    </div>
+    <button class="btn block" id="btnNextCall" type="button" style="margin-bottom:10px"></button>
+    <div class="row nowrap" style="margin:0 2px 8px;justify-content:space-between">
+      <div class="small muted" id="count"></div>
+      <select class="select sm hide" id="fColl" aria-label="فلتر Coll"><option value="">كل الـ Coll</option></select>
+    </div>
+    <div id="cList"></div>
+    <button class="btn block hide" type="button" id="bMore" style="margin-top:12px">عرض المزيد</button>
+  </section>
+
+</main>
+
+<!-- بيانات عميل + مكالمة -->
+<div class="overlay" id="cv" data-backdrop="1">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="cvTitle">
+    <div class="sheet-h"><h3 id="cvTitle"></h3><button class="btn quiet icon-btn" type="button" onclick="M.close('cv')" aria-label="إغلاق" id="cvX"></button></div>
+    <div class="sheet-b" id="cvBody"></div>
+  </div>
+</div>
+
+<!-- تفاصيل الزيارة -->
+<div class="overlay" id="vs" data-backdrop="1">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="vsTitle">
+    <div class="sheet-h"><h3 id="vsTitle"></h3><span id="vsTag"></span><button class="btn quiet icon-btn" type="button" onclick="M.close('vs')" aria-label="إغلاق" id="vsX"></button></div>
+    <div class="sheet-b" id="vsBody"></div>
+    <div class="sheet-f"><button class="btn" type="button" onclick="M.close('vs')">إغلاق</button><button class="btn primary" type="button" id="vsSave">حفظ النتيجة</button></div>
+  </div>
+</div>
+
+<script src="assets/app.js?v=20261004-brand"></script>
+<script>
+if (!M.guard(['collector', 'data_entry', 'admin', 'super_admin'])) throw new Error('auth');
+const $ = id => document.getElementById(id), esc = M.esc;
+
+/* ---------- الهيدر والتبويبات ---------- */
+const back = { admin: 'admin.html', super_admin: 'superadmin.html', data_entry: 'dataentry.html' }[M.user.role];
+$('bar').innerHTML = M.appbar({
+  title: M.user.full_name,
+  sub: (M.ROLE[M.user.role] || [''])[0],
+  actions: (back ? `<a class="btn sm" href="${back}">${M.icon('home')} <span>لوحتي</span></a>` : '') +
+           `<a class="btn sm icon-btn" href="my_calls.html" title="سجل مكالماتي" aria-label="سجل مكالماتي">${M.icon('list')}</a>`
+});
+$('tVisits').innerHTML = M.icon('pin') + '<span>الزيارات</span><span class="dot hide" id="dotOver"></span>';
+$('tClients').innerHTML = M.icon('users') + '<span>العملاء</span>';
+$('vsX').innerHTML = M.icon('x');
+$('cvX').innerHTML = M.icon('x');
+
+let activeTab = 'visits';
+
+/* =====================================================================
+   الزيارات
+   ===================================================================== */
+const vs = { filter: 'today', list: [], stats: {}, today: M.today() };
+
+async function loadVisits(silent) {
+  if (!silent) $('vList').innerHTML = '<div class="empty"><span class="spin"></span></div>';
+  const j = await M.get('get_my_visits', { filter: vs.filter });
+  if (!j.success) { if (!silent) $('vList').innerHTML = `<div class="empty">${esc(j.message || 'تعذر التحميل')}</div>`; return; }
+  vs.list = j.visits; vs.stats = j.stats; vs.today = j.today;
+  renderStats(); renderVisits();
+}
+function renderStats() {
+  const s = vs.stats;
+  $('kTotal').textContent = M.num(s.today_total);
+  $('kDone').textContent = M.num(s.today_done);
+  $('kPend').textContent = M.num(s.today_pending);
+  $('chOver').textContent = s.overdue ? `متأخرة (${s.overdue})` : 'متأخرة';
+  const d = $('dotOver'); d.textContent = s.overdue; d.classList.toggle('hide', !s.overdue);
+}
+function renderVisits() {
+  const box = $('vList');
+  if (!vs.list.length) {
+    const msgs = { today: 'مفيش زيارات ليك النهارده', overdue: 'مفيش زيارات متأخرة 👌', done: 'لسه مفيش زيارات متسجلة كـ "تمت"', all: 'مفيش زيارات' };
+    box.innerHTML = `<div class="empty">${M.icon('calendar')}${msgs[vs.filter]}</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="list">${vs.list.map(v => {
+    const done = M.isDone(v.status);
+    const old = v.visit_date !== vs.today;
+    return `<div class="item ${M.visitEdge(v.status)}" data-id="${v.id}">
+      <button class="check ${done ? 'on' : ''}" type="button" data-check="${v.id}" aria-label="${done ? 'إلغاء علامة الزيارة' : 'تمت الزيارة'}">${M.icon('check')}</button>
+      <div class="grow">
+        <div class="item-t">${esc(v.name)}</div>
+        <div class="item-s">${esc(v.address || 'بدون عنوان')}${v.landmark ? ' — <b>' + esc(v.landmark) + '</b>' : ''}</div>
+        <div class="item-x"><b class="num" style="color:var(--brass)">${M.money(v.total_debt)} ج.م</b>${M.visitTag(v.status)}${old ? `<span class="muted small">${M.dmy(v.visit_date)}</span>` : ''}${v.admin_notes ? `<span class="tag brass">${M.icon('info')} توجيه</span>` : ''}</div>
+      </div></div>`;
+  }).join('')}</div>`;
+}
+$('vList').addEventListener('click', e => {
+  const chk = e.target.closest('[data-check]');
+  if (chk) { e.stopPropagation(); return quickToggle(+chk.dataset.check, chk); }
+  const it = e.target.closest('.item');
+  if (it) openVisit(+it.dataset.id);
+});
+$('vChips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  M.$$('#vChips .chip').forEach(x => x.classList.toggle('on', x === b));
+  vs.filter = b.dataset.f; loadVisits();
+});
+
+// علامة "تمت" بضغطة واحدة (مع تراجع)
+async function quickToggle(id, btn) {
+  const v = vs.list.find(x => x.id == id); if (!v) return;
+  const prev = v.status, next = M.isDone(prev) ? 'pending' : 'done';
+  await M.busy(btn, async () => {
+    const j = await M.postOrQueue('mark_visit', { visit_id: id, status: next }, 'زيارة');
+    if (!j.success) return M.err(j.message);
+    v.status = next;
+    await loadVisits(true);
+    M.toast(next === 'done' ? `تم تسجيل زيارة ${v.name}` : 'رجّعت الزيارة لقيد الانتظار', {
+      action: { label: 'تراجع', fn: async () => { const r = await M.post('mark_visit', { visit_id: id, status: prev || 'pending' }); if (r.success) loadVisits(true); else M.err(r.message); } }
+    });
+  });
+}
+
+// تفاصيل الزيارة + تسجيل النتيجة
+const OUTCOMES = [['done', 'تمت الزيارة', 'ok'], ['paid', 'سدّد بالكامل', 'ok'], ['partial', 'دفع جزء', 'info'], ['promise', 'وعد بالسداد', 'warn'], ['absent', 'غير موجود', 'bad'], ['refused', 'رفض السداد', 'bad'], ['wrong', 'عنوان غلط', 'warn']];
+let curV = null, curOutcome = 'done';
+function openVisit(id) {
+  const v = curV = vs.list.find(x => x.id == id); if (!v) return;
+  curOutcome = M.isPending(v.status) ? 'done' : v.status;
+  $('vsTitle').textContent = v.name;
+  $('vsTag').innerHTML = M.visitTag(v.status);
+  $('vsBody').innerHTML =
+    (v.admin_notes ? `<div class="note dir" style="margin-top:0;margin-bottom:10px"><small>توجيهات الإدارة</small>${esc(v.admin_notes)}</div>` : '') +
+    (v.phone ? `<div class="row nowrap" style="margin-bottom:2px">${M.callBtn(v.phone, { cls: 'primary grow', showNum: true, name: v.name })}<a class="btn wa" target="_blank" rel="noopener" href="${M.waUrl(v.phone)}">${M.icon('chat')} واتساب</a></div>` : '') +
+    M.customerBody(v) +
+    `<div class="section-t">نتيجة الزيارة</div>
+     <div class="seg" id="ocSeg">${OUTCOMES.map(o => `<button type="button" class="${o[2]}" data-st="${o[0]}">${o[1]}</button>`).join('')}</div>
+     <label class="field hide" id="ocAmtF" style="margin-top:12px"><span>المبلغ اللي اتحصّل (ج.م)</span><input class="input" id="ocAmt" type="number" inputmode="decimal" min="0" step="0.01" dir="ltr" style="text-align:right"></label>
+     <label class="field" style="margin-top:12px"><span>ملاحظاتك</span><textarea class="textarea" id="ocNotes" placeholder="مثلاً: العميل وعد بالسداد يوم الخميس"></textarea></label>
+     ${M.isPending(v.status) ? '' : '<button class="btn quiet sm" type="button" id="ocReset">إلغاء النتيجة والرجوع لقيد الانتظار</button>'}`;
+  $('ocNotes').value = v.collector_notes || '';
+  $('ocAmt').value = +v.collected_amount ? v.collected_amount : '';
+  paintOutcome();
+  M.$$('#ocSeg button').forEach(b => b.onclick = () => { curOutcome = b.dataset.st; paintOutcome(); });
+  const r = $('ocReset'); if (r) r.onclick = () => saveOutcome('pending', r);
+  M.open('vs');
+}
+function paintOutcome() {
+  M.$$('#ocSeg button').forEach(b => b.classList.toggle('on', b.dataset.st === curOutcome));
+  $('ocAmtF').classList.toggle('hide', !['paid', 'partial'].includes(curOutcome));
+}
+async function saveOutcome(status, btn) {
+  if (!curV) return;
+  const body = { visit_id: curV.id, status, notes: $('ocNotes').value.trim(), collected_amount: ['paid', 'partial'].includes(status) ? (parseFloat($('ocAmt').value) || 0) : 0 };
+  if (status === 'partial' && !body.collected_amount) return M.err('اكتب المبلغ اللي اتحصّل');
+  await M.busy(btn, async () => {
+    const j = await M.postOrQueue('mark_visit', body, 'زيارة');
+    if (!j.success) return M.err(j.message);
+    M.close('vs'); M.toast('تم حفظ نتيجة الزيارة');
+    loadVisits(true);
+  });
+}
+$('vsSave').onclick = e => saveOutcome(curOutcome, e.currentTarget);
+
+// تحديث تلقائي عشان أي زيارة الإدارة تضيفها تظهر بدون ما تعمل ريفريش
+setInterval(() => { if (!document.hidden && activeTab === 'visits' && !$('vs').classList.contains('on')) loadVisits(true); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && activeTab === 'visits') loadVisits(true); });
+
+/* =====================================================================
+   العملاء
+   ===================================================================== */
+const CALL_OUT = [['تم التواصل بنجاح', 'تم التواصل', 'ok'], ['لم يتم الرد', 'لم يرد', 'bad'], ['الخط مشغول', 'مشغول', 'warn'], ['تعهد بالسداد', 'تعهد بالسداد', 'info']];
+const TEMPLATES = {
+  inst: c => `السلام عليكم ${c.name}، بنفكّرك إن عليك قسط متأخر بقيمة ${M.money(c.installment)} جنيه. برجاء السداد في أقرب وقت لتجنب أي غرامات إضافية. شركة الموارد.`,
+  ptp: c => `السلام عليكم ${c.name}، بنأكد على وعدك بالسداد${c.ptp_date ? ' يوم ' + c.ptp_date : ''}. نشكرك على التزامك. شركة الموارد.`,
+  gen: c => `السلام عليكم ${c.name}، معاك شركة الموارد بخصوص مديونيتك. برجاء التواصل معنا لتسوية موقفك.`
+};
+let callStatus = '';
+$('btnNextCall').innerHTML = M.icon('next') + ' اتصل بالعميل التالي';
+
+async function loadCallStats() {
+  const j = await M.get('my_sheet_info');
+  if (!j.success) return;
+  const s = j.stats || {};
+  $('cTotal').textContent = M.num(s.today_total); $('cOk').textContent = M.num(s.today_success); $('cLeft').textContent = M.num(s.pending_today);
+}
+
+const CS = { q: '', coll: '', offset: 0, total: 0, list: [], more: false };
+let clSeq = 0;
+async function loadClients(reset = true) {
+  if (reset) { CS.offset = 0; CS.list = []; $('cList').innerHTML = '<div class="empty"><span class="spin"></span></div>'; }
+  const my = ++clSeq;
+  const j = await M.get('get_team_clients', { q: CS.q, coll: CS.coll, offset: CS.offset, limit: 50 });
+  if (my !== clSeq) return;
+  if (!j.success) { $('cList').innerHTML = `<div class="empty">${esc(j.message || 'تعذر التحميل')}</div>`; return; }
+  CS.list = CS.list.concat(j.clients); CS.total = j.total; CS.more = j.has_more; CS.offset = CS.list.length;
+  if (j.colls) fillColls(j.colls);
+  renderClients();
+}
+function fillColls(colls) {
+  const sel = $('fColl'), cur = CS.coll;
+  sel.innerHTML = '<option value="">كل الـ Coll</option>' + colls.map(c => `<option ${c === cur ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  sel.classList.toggle('hide', !colls.length);
+}
+function renderClients() {
+  $('count').textContent = CS.total ? `عرض ${M.num(CS.list.length)} من ${M.num(CS.total)} عميل` : '';
+  $('bMore').classList.toggle('hide', !CS.more);
+  if (!CS.list.length) {
+    $('cList').innerHTML = `<div class="empty">${M.icon('users')}${CS.q ? 'مفيش عملاء بالشكل ده' : 'لا يوجد عملاء مسندون لك حاليًا. تواصل مع المشرف لإسناد العملاء.'}</div>`;
+    return;
+  }
+  $('cList').innerHTML = `<div class="list">${CS.list.map((c, i) => {
+    const d = +c.delay_days || 0, edge = d > 90 ? 's-bad' : d > 30 ? 's-warn' : 's-pending';
+    const lastCall = c.last_call_at ? M.dt(c.last_call_at) : '—';
+    const lastVisit = c.last_visit_at ? M.dt(c.last_visit_at) : '—';
+    return `<div class="item ${edge}" data-i="${i}">
+      <div class="grow">
+        <div class="item-t">${esc(c.name)}</div>
+        <div class="item-s">${c.phone ? '<span class="ltr num">' + esc(c.phone) + '</span>' : '<span class="tag warn">بدون رقم</span>'}</div>
+        <div class="item-s muted small" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:8px 14px">
+          <span>${M.icon('phone')} آخر مكالمة: <b class="ltr" style="font-weight:600;color:var(--ink)">${esc(lastCall)}</b></span>
+          <span>${M.icon('pin')} آخر زيارة: <b class="ltr" style="font-weight:600;color:var(--ink)">${esc(lastVisit)}</b></span>
+        </div>
+        <div class="item-x"><b class="num" style="color:var(--brass)">${M.money(M.debt(c).total)} ج.م</b>
+          ${d ? `<span class="tag ${d > 90 ? 'bad' : 'warn'}">تأخير ${M.num(d)} يوم</span>` : ''}</div>
+      </div></div>`;
+  }).join('')}</div>`;
+}
+$('cList').addEventListener('click', e => {
+  const it = e.target.closest('.item'); if (it) openClient(CS.list[+it.dataset.i].id);
+});
+$('bMore').onclick = e => M.busy(e.currentTarget, () => loadClients(false));
+$('q').addEventListener('input', M.debounce(() => { CS.q = $('q').value.trim(); loadClients(); }, 350));
+$('fColl').onchange = () => { CS.coll = $('fColl').value; loadClients(); };
+
+$('btnNextCall').onclick = async e => M.busy(e.currentTarget, async () => {
+  const j = await M.get('next_customer');
+  if (!j.success) { M.toast(j.message || 'مفيش عملاء تانيين', { type: j.message ? '' : 'bad' }); return; }
+  openClient(j.data.id);
+});
+
+// عرض بيانات عميل + تسجيل نتيجة مكالمة
+async function openClient(id) {
+  callStatus = '';
+  $('cvTitle').textContent = 'جاري التحميل...'; $('cvBody').innerHTML = '<div class="empty"><span class="spin"></span></div>';
+  M.open('cv');
+  const j = await M.get('get_client_by_id', { id });
+  if (!j.success) { M.close('cv'); return M.err(j.message); }
+  $('cvTitle').textContent = j.client.name;
+  const c = j.client;
+  const draft = localStorage.getItem('draft:' + c.id) || '';
+  const today = c.already_contacted_today
+    ? `<div class="alert warn">${M.icon('clock')}<div>اتكلمت مع العميل ده النهارده${c.last_contact_time ? ' الساعة ' + M.hm(c.last_contact_time) : ''}</div></div>` : '';
+
+  let body = (c.phone ? `<div class="row nowrap">${M.callBtn(c.phone, { cls: 'primary grow', showNum: true, name: c.name })}</div>` : '')
+    + `<div class="row nowrap" style="margin-top:8px">${c.phone ? `<select class="select grow" id="tpl"><option value="inst">رسالة: تذكير بالقسط</option><option value="ptp">رسالة: تأكيد تعهد</option><option value="gen">رسالة: عامة</option></select><a class="btn wa" id="aWa" target="_blank" rel="noopener" href="#">${M.icon('chat')} واتساب</a>` : ''}</div>`
+    + today
+    + M.customerBody(c) + M.notesBlock(c.dcr)
+    + (c.ptp || c.ptp_date ? `<div class="note"><small>آخر تعهد</small>${esc(c.ptp || '')} ${c.ptp_date ? '· ' + esc(c.ptp_date) : ''}</div>` : '');
+
+  body += `<button class="btn block" type="button" id="bAI" style="margin-top:12px">${M.icon('bolt')} اقتراح أسلوب تفاوض</button><div id="aiOut" class="note hide"></div>`;
+
+  // تسجيل نتيجة مكالمة
+  body += `<div class="block" style="margin-top:12px"><div class="block-t">${M.icon('phone')} تسجيل نتيجة مكالمة</div>
+    <div class="block-b">
+      <div class="seg" id="cSeg">${CALL_OUT.map(o => `<button type="button" class="${o[2]}" data-s="${o[0]}">${o[1]}</button>`).join('')}</div>
+      <div class="grid2 hide" id="ptpF" style="margin-top:12px">
+        <label class="field" style="margin:0"><span>مبلغ التعهد</span><input class="input" id="ptp" inputmode="decimal" dir="ltr" style="text-align:right"></label>
+        <label class="field" style="margin:0"><span>تاريخ السداد</span><input class="input" id="ptpDate" type="date" dir="ltr" style="text-align:right"></label>
+      </div>
+      <label class="field" style="margin-top:12px"><span>ملاحظة (DCR)</span><textarea class="textarea" id="dcr" placeholder="اللي حصل في المكالمة...">${esc(draft)}</textarea></label>
+      <button class="btn primary block lg" type="button" id="bSaveCall">${M.icon('check')} حفظ نتيجة المكالمة</button>
+    </div></div>`;
+
+  // تذكير
+  body += `<div class="block" style="margin-top:12px"><div class="block-t">${M.icon('bell')} تذكير على العميل</div>
+    <div class="block-b">
+      <div class="filters" style="margin:0">
+        <label class="field grow"><span>متى؟</span><input class="input" type="datetime-local" id="rmAt" dir="ltr" style="text-align:right"></label>
+        <label class="field grow"><span>ملاحظة</span><input class="input" id="rmNote" placeholder="مثال: كلّمه تاني في التعهد"></label>
+      </div>
+      <button class="btn sm primary" type="button" id="rmSave" style="margin-top:8px">${M.icon('bell')} ضبط تذكير</button>
+    </div></div>`;
+
+  // تايملاين
+  body += `<div class="block" style="margin-top:12px"><div class="block-t">${M.icon('list')} السجل الكامل</div>
+    <div class="block-b" id="cvTimeline"><span class="spin"></span> جاري التحميل...</div></div>`;
+
+  $('cvBody').innerHTML = body;
+
+  if (c.phone) { const setWa = () => { $('aWa').href = M.waUrl(c.phone, TEMPLATES[$('tpl').value](c)); }; $('tpl').onchange = setWa; setWa(); }
+
+  M.$$('#cSeg button').forEach(b => b.onclick = () => {
+    callStatus = b.dataset.s;
+    M.$$('#cSeg button').forEach(x => x.classList.toggle('on', x === b));
+    $('ptpF').classList.toggle('hide', callStatus !== 'تعهد بالسداد');
+  });
+  $('dcr').addEventListener('input', () => { try { localStorage.setItem('draft:' + c.id, $('dcr').value); } catch (e) {} });
+  $('bSaveCall').onclick = e => M.busy(e.currentTarget, async () => {
+    const dcr = $('dcr').value.trim();
+    if (!callStatus && !dcr) return M.err('اختار حالة المكالمة أو اكتب ملاحظة');
+    const jr = await M.post('update_customer', { client_id: c.id, status: callStatus, ptp: $('ptp') ? $('ptp').value.trim() : '', ptp_date: $('ptpDate') ? $('ptpDate').value : '', dcr });
+    if (!jr.success) return M.err(jr.message);
+    try { localStorage.removeItem('draft:' + c.id); } catch (e) {}
+    M.toast('تم حفظ نتيجة المكالمة ✓');
+    M.close('cv');
+    loadCallStats(); loadClients(false);
+  });
+  $('bAI').onclick = async e => M.busy(e.currentTarget, async () => {
+    const out = $('aiOut'); out.classList.remove('hide'); out.innerHTML = '<span class="spin"></span> بيفكر...';
+    const jr = await M.post('ai_negotiate', c);
+    out.innerHTML = jr.success ? `<small>أسلوب مقترح</small>${esc(jr.strategy).replace(/\n/g, '<br>')}` : esc(jr.message || 'تعذر التوليد');
+  });
+
+  // default remind = tomorrow 10:00
+  try {
+    const d = new Date(); d.setDate(d.getDate()+1); d.setHours(10,0,0,0);
+    const pad = n => String(n).padStart(2,'0');
+    $('rmAt').value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch(e) {}
+
+  $('rmSave').onclick = e => M.busy(e.currentTarget, async () => {
+    const remind_at = ($('rmAt').value || '').replace('T', ' ');
+    if (!remind_at) return M.err('اختار وقت التذكير');
+    const j2 = await M.post('save_reminder', { client_id: id, remind_at, note: $('rmNote').value.trim() });
+    if (!j2.success) return M.err(j2.message);
+    M.toast('تم ضبط التذكير');
+  });
+
+  const tl = await M.get('client_timeline', { client_id: id });
+  const box = $('cvTimeline');
+  if (!tl.success) { box.innerHTML = `<div class="muted">${esc(tl.message||'تعذر التحميل')}</div>`; }
+  else if (!(tl.events||[]).length) { box.innerHTML = `<div class="muted">مفيش مكالمات أو زيارات مسجّلة لسه</div>`; }
+  else {
+    box.innerHTML = `<div class="list" style="max-height:280px;overflow:auto">${tl.events.map(ev => {
+      const ic = ev.type === 'call' ? 'phone' : 'pin';
+      return `<div class="item" style="padding:10px 0;border-bottom:1px solid var(--line,#E7ECF0)">
+        <div class="grow">
+          <div class="item-t" style="font-size:13.5px">${M.icon(ic)} ${esc(ev.title)}</div>
+          <div class="item-s muted small">${esc(M.dt(ev.at))}${ev.user?' · '+esc(ev.user):''}</div>
+          ${ev.detail?`<div class="muted small" style="margin-top:2px">${esc(ev.detail)}</div>`:''}
+        </div></div>`;
+    }).join('')}</div>`;
+  }
+}
+
+/* ---------- دورة التحصيل المسندة ---------- */
+const collectionCyclePanel = M.collectionCyclePanel($('collectionCycleBox'));
+
+/* ---------- تشغيل ---------- */
+M.loadWorkPanel($('dailyTargetBox'), $('myTasksBox'));
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    M.loadWorkPanel($('dailyTargetBox'), $('myTasksBox'));
+    collectionCyclePanel?.reload();
+  }
+});
+setInterval(() => { if (!document.hidden) collectionCyclePanel?.reload(); }, 60000);
+M.tabs($('tabs'), name => {
+  activeTab = name;
+  if (name === 'visits') loadVisits();
+  if (name === 'clients') { loadCallStats(); loadClients(); }
+});
+</script>
+</body>
+</html>

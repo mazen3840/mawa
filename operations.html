@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>دورات التحصيل</title>
+  <link rel="stylesheet" href="assets/mawared.css?v=20261004-brand">
+  <script src="assets/app.js?v=20261004-brand"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+  (async function () {
+    if (!M.guard()) return;
+    const user = M.user;
+    if (!['admin', 'super_admin'].includes(user.role)) {
+      location.replace(user.role === 'data_entry' ? 'dataentry.html' : 'collector.html');
+      return;
+    }
+    document.getElementById('app').innerHTML = `${M.appbar({ title: 'دورات التحصيل', subtitle: 'إنشاء الدورة الشهرية، توزيع الملفات، مراجعة التسليمات وأرشفتها', actions: '<a class="btn sm" href="collection_center.html">مركز التحصيل</a>' })}
+      <main class="wrap">
+        <section class="panel"><div class="panel-b">
+          <h1 style="margin-bottom:12px">إنشاء دورة تحصيل</h1>
+          <form id="createCycle" class="filters" autocomplete="off">
+            <label class="field grow"><span>اسم الدورة</span><input class="input" name="name" maxlength="180" placeholder="مثال: تحصيل يونيو 2026" required></label>
+            <label class="field"><span>الشهر</span><input class="input" name="month_key" type="month" required></label>
+            <label class="field grow"><span>المحفظة (اختياري)</span><input class="input" name="portfolio_name" maxlength="180"></label>
+            <button class="btn primary" type="submit">${M.icon('plus')} إنشاء الدورة</button>
+          </form>
+        </div></section>
+        <section class="panel" style="margin-top:14px">
+          <div class="panel-h"><h2>الدورات</h2><button class="btn sm" type="button" id="refreshCycles">${M.icon('refresh')} تحديث</button></div>
+          <div class="panel-b"><div class="table-wrap"><table class="t"><thead><tr><th>الدورة</th><th>الشهر</th><th>الحالة</th><th>العملاء</th><th>الموظفون</th><th></th></tr></thead><tbody id="cycleRows"><tr><td colspan="6">جاري التحميل…</td></tr></tbody></table></div></div>
+        </section>
+        <section class="panel panel-b hide" id="cycleDetails" style="margin-top:14px"></section>
+      </main>`;
+    const cycleRows = document.getElementById('cycleRows');
+    const detail = document.getElementById('cycleDetails');
+    const now = new Date();
+    document.querySelector('#createCycle [name="month_key"]').value =
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const request = async promise => {
+      const result = await promise;
+      if (!result.success) throw new Error(result.message || 'تعذر إكمال الطلب');
+      return result;
+    };
+    const stateLabel = value => ({ draft: 'مسودة', active: 'نشطة', review: 'قيد المراجعة', closed: 'مغلقة', archived: 'مؤرشفة' }[value] || value);
+    const assignmentLabel = value => ({ pending: 'بانتظار الملف', working: 'قيد العمل', submitted: 'تم التسليم', approved: 'معتمد' }[value] || value);
+    const combinedSheetState = { cycleId: 0, file: null, values: [], selectedValue: '', selectedEmployee: '' };
+
+    async function loadCycles() {
+      cycleRows.innerHTML = '<tr><td colspan="6">جاري التحميل…</td></tr>';
+      try {
+        const result = await request(M.get('collection_cycles'));
+        cycleRows.innerHTML = (result.cycles || []).map(cycle => `<tr>
+          <td><b>${M.esc(cycle.name)}</b>${cycle.portfolio_name ? `<small class="muted" style="display:block">${M.esc(cycle.portfolio_name)}</small>` : ''}</td>
+          <td>${M.esc(cycle.month_key)}</td><td>${M.esc(stateLabel(cycle.status))}</td>
+          <td>${M.num(cycle.client_count)}</td><td>${M.num(cycle.worker_count)}</td>
+          <td><button class="btn sm" type="button" data-open-cycle="${Number(cycle.id)}">التفاصيل</button></td>
+        </tr>`).join('') || '<tr><td colspan="6" class="empty">لا توجد دورات بعد</td></tr>';
+      } catch (error) {
+        cycleRows.innerHTML = `<tr><td colspan="6" class="empty">${M.esc(error.message)}</td></tr>`;
+      }
+    }
+
+    async function openCycle(id) {
+      detail.classList.remove('hide');
+      detail.innerHTML = '<p>جاري تحميل تفاصيل الدورة…</p>';
+      try {
+        const [result, workerResult] = await Promise.all([
+          request(M.get('collection_cycle_detail', { cycle_id: id })),
+          request(M.get('get_collection_workers', { cycle_id: id }))
+        ]);
+        const cycle = result.cycle;
+        const workers = workerResult.workers || [];
+        const assignments = cycle.assignments || [];
+        const collectionAssignments = assignments.filter(item => item.is_current_cycle);
+        const assignedIds = new Set(assignments.map(item => Number(item.user_id)));
+        const availableWorkers = workers.filter(worker => !assignedIds.has(Number(worker.id)));
+        const uploadAssignments = assignments.filter(item => !['submitted', 'approved'].includes(item.status));
+        if (combinedSheetState.cycleId !== Number(cycle.id)) {
+          combinedSheetState.cycleId = Number(cycle.id);
+          combinedSheetState.file = null;
+          combinedSheetState.values = [];
+          combinedSheetState.selectedValue = '';
+          combinedSheetState.selectedEmployee = '';
+        }
+        if (!uploadAssignments.some(item => String(item.user_id) === combinedSheetState.selectedEmployee)) {
+          combinedSheetState.selectedEmployee = String(uploadAssignments[0]?.user_id || '');
+        }
+        if (!combinedSheetState.values.some(item => item.value === combinedSheetState.selectedValue)) {
+          combinedSheetState.selectedValue = combinedSheetState.values[0]?.value || '';
+        }
+        const allApproved = assignments.length > 0 && assignments.every(item => item.status === 'approved');
+        detail.innerHTML = `<div class="row"><div class="grow"><h2>${M.esc(cycle.name)}</h2><p class="muted">شهر ${M.esc(cycle.month_key)} · ${M.esc(stateLabel(cycle.status))} · ${M.num(cycle.client_count)} عميل</p></div>
+          <button class="btn quiet icon-btn" type="button" id="closeCycleDetails" aria-label="إغلاق">${M.icon('x')}</button></div>
+          ${['draft','active'].includes(cycle.status) ? `<form id="assignWorker" class="filters"><input type="hidden" name="cycle_id" value="${Number(cycle.id)}">
+            <label class="field grow"><span>إسناد إلى موظف</span><select class="select" name="user_id" required>${availableWorkers.length ? availableWorkers.map(worker => `<option value="${Number(worker.id)}">${M.esc(worker.full_name)} · ${worker.role === 'data_entry' ? 'مدخل بيانات' : 'محصل'}</option>`).join('') : '<option value="">لا يوجد موظفون متاحون</option>'}</select></label>
+            <button class="btn primary" type="submit" ${availableWorkers.length ? '' : 'disabled'}>${M.icon('users')} إسناد</button></form>` : ''}
+          ${['draft','active'].includes(cycle.status) && uploadAssignments.length ? `<form id="combinedSheetForm" class="panel combined-sheet-panel">
+            <div class="panel-h">${M.icon('upload')} رفع شيت مجمع حسب coll</div><div class="panel-b">
+              <p class="muted small" style="margin-bottom:12px">ارفع ملف الإكسل مرة واحدة، اختر قيمة coll ثم الموظف المطلوب. سيتم استيراد الصفوف المطابقة لهذه القيمة فقط.</p>
+              <div class="grid2 combined-sheet-fields">
+                <label class="field"><span>ملف الإكسل المجمع</span><input class="input" id="combinedSheetFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"><small class="muted" id="combinedSheetFileName">${M.esc(combinedSheetState.file?.name || '')}</small></label>
+                <label class="field"><span>إضافة العملاء إلى الموظف</span><select class="select" name="assign_to" id="combinedSheetEmployee" required>${uploadAssignments.map(item => `<option value="${Number(item.user_id)}" ${String(item.user_id) === combinedSheetState.selectedEmployee ? 'selected' : ''}>${M.esc(item.full_name)} · ${item.role === 'data_entry' ? 'مدخل بيانات' : 'محصل'}</option>`).join('')}</select></label>
+                <label class="field"><span>مجموعة coll في الشيت</span><select class="select" name="collector_filter" id="combinedSheetColl" required ${combinedSheetState.values.length ? '' : 'disabled'}>${combinedSheetState.values.length ? combinedSheetState.values.map(item => `<option value="${M.esc(item.value)}" ${item.value === combinedSheetState.selectedValue ? 'selected' : ''}>${M.esc(item.value)} · ${M.num(item.count)} عميل</option>`).join('') : '<option value="">اختر الملف لمعاينة قيم coll</option>'}</select></label>
+                <div class="combined-sheet-submit"><button class="btn primary" type="submit" ${combinedSheetState.file && combinedSheetState.values.length ? '' : 'disabled'}>${M.icon('upload')} رفع العملاء المختارين</button><span class="muted small" id="combinedSheetStatus">${combinedSheetState.values.length ? `تم العثور على ${M.num(combinedSheetState.values.length)} مجموعات في coll` : 'سيتم عرض عدد العملاء بعد المعاينة'}</span></div>
+              </div>
+            </div>
+          </form>` : ''}
+          <div class="table-wrap"><table class="t"><thead><tr><th>الموظف</th><th>الدور</th><th>العملاء</th><th>تحصيل الدورة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+            ${assignments.map(item => `<tr><td>${M.esc(item.full_name)}</td><td>${item.role === 'data_entry' ? 'مدخل بيانات' : 'محصل'}</td><td>${M.num(item.assigned_clients_count ?? item.uploaded_count ?? item.assigned_count)}</td><td><b class="num">${M.money(item.credited_total)} ج.م</b></td><td>${M.esc(assignmentLabel(item.status))}</td>
+            <td>${item.status === 'submitted' ? `<button class="btn primary sm" type="button" data-approve-user="${Number(item.user_id)}" data-cycle="${Number(cycle.id)}">اعتماد التسليم</button>` : '—'}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">لم يتم إسناد موظفين لهذه الدورة</td></tr>'}
+          </tbody></table></div>
+          ${['active','review'].includes(cycle.status) && collectionAssignments.length ? `<form id="recordEmployeeCollection" class="filters" style="margin-top:14px">
+            <input type="hidden" name="cycle_id" value="${Number(cycle.id)}">
+            <label class="field grow"><span>الموظف</span><select class="select" name="employee_id" required>${collectionAssignments.map(item => `<option value="${Number(item.user_id)}">${M.esc(item.full_name)}</option>`).join('')}</select></label>
+            <label class="field"><span>مبلغ التحصيل (ج.م)</span><input class="input" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+            <button class="btn primary" type="submit">${M.icon('plus')} تسجيل التحصيل</button>
+          </form><p class="muted small">يسجل المبلغ ضمن إنجاز الموظف في هذه الدورة فقط، ولا يغير بيانات العملاء.</p>` : ''}
+          ${allApproved ? `<div class="row" style="justify-content:flex-start;margin-top:14px"><button type="button" class="btn primary" id="downloadCombinedCycle" data-cycle="${Number(cycle.id)}">${M.icon('download')} تحميل الشيت المجمع بعد الاعتماد</button><span class="muted small">${cycle.source_available ? 'يشمل بيانات كل الموظفين المعتمدة وآخر تحديثات النظام.' : 'سيحاول النظام استعادة الشيت الأصلي من ملفات الموظفين.'}</span></div>` : ''}
+          ${['active','review'].includes(cycle.status) ? `<div class="row" style="justify-content:space-between;margin-top:14px"><span class="muted">لا يمكن الأرشفة إلا بعد اعتماد تسليم جميع الموظفين.</span><button type="button" class="btn ${allApproved ? 'primary' : ''}" id="archiveCycle" data-cycle="${Number(cycle.id)}" ${allApproved ? '' : 'disabled'}>إغلاق وأرشفة الدورة</button></div>` : ''}`;
+      } catch (error) {
+        detail.innerHTML = `<div class="alert bad">${M.esc(error.message)}</div>`;
+      }
+    }
+
+    document.getElementById('createCycle').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = new FormData(form);
+      try {
+        const result = await request(M.post('create_collection_cycle', {
+          name: String(data.get('name') || '').trim(),
+          month_key: data.get('month_key'),
+          portfolio_name: String(data.get('portfolio_name') || '').trim()
+        }));
+        M.toast(result.message || 'تم إنشاء الدورة');
+        form.reset();
+        await loadCycles();
+        await openCycle(Number(result.id));
+      } catch (error) { M.err(error.message); }
+    });
+    document.getElementById('refreshCycles').addEventListener('click', loadCycles);
+    cycleRows.addEventListener('click', event => {
+      const button = event.target.closest('[data-open-cycle]');
+      if (button) openCycle(Number(button.dataset.openCycle));
+    });
+    async function previewCombinedSheet() {
+      const file = combinedSheetState.file;
+      const employeeId = combinedSheetState.selectedEmployee;
+      const filter = detail.querySelector('#combinedSheetColl');
+      const submit = detail.querySelector('#combinedSheetForm button[type="submit"]');
+      const status = detail.querySelector('#combinedSheetStatus');
+      if (!file || !employeeId || !filter || !submit || !status) return;
+      filter.disabled = true;
+      submit.disabled = true;
+      status.textContent = 'جاري معاينة قيم coll…';
+      const body = new FormData();
+      body.append('sheet', file);
+      body.append('cycle_id', String(combinedSheetState.cycleId));
+      body.append('assign_to', employeeId);
+      try {
+        const result = await request(M.api('?action=preview_collection_sheet', { method: 'POST', body }));
+        combinedSheetState.values = result.values || [];
+        const availableValues = combinedSheetState.values.filter(item => !item.assigned_elsewhere);
+        if (!availableValues.some(item => item.value === combinedSheetState.selectedValue)) {
+          combinedSheetState.selectedValue = availableValues[0]?.value || '';
+        }
+        filter.innerHTML = combinedSheetState.values.map(item => `<option value="${M.esc(item.value)}" ${item.value === combinedSheetState.selectedValue ? 'selected' : ''} ${item.assigned_elsewhere ? 'disabled' : ''}>${M.esc(item.value)} · ${M.num(item.count)} عميل${item.assigned_elsewhere ? ' · تم إسنادها لموظف آخر' : ''}</option>`).join('');
+        filter.disabled = !combinedSheetState.values.length;
+        submit.disabled = !availableValues.length;
+        status.textContent = availableValues.length
+          ? `تم العثور على ${M.num(combinedSheetState.values.length)} مجموعات في coll؛ ${M.num(availableValues.length)} متاحة للإسناد`
+          : 'كل مجموعات coll في الملف مسندة بالفعل لموظفين آخرين';
+      } catch (error) {
+        combinedSheetState.values = [];
+        combinedSheetState.selectedValue = '';
+        filter.innerHTML = '<option value="">تعذرت معاينة قيم coll</option>';
+        filter.disabled = true;
+        status.textContent = error.message;
+      }
+    }
+    detail.addEventListener('click', async event => {
+      if (event.target.closest('#closeCycleDetails')) { detail.classList.add('hide'); return; }
+      const approve = event.target.closest('[data-approve-user]');
+      const archive = event.target.closest('#archiveCycle');
+      const download = event.target.closest('#downloadCombinedCycle');
+      try {
+        if (download) {
+          await M.download('download_collection_sheet', { cycle_id: Number(download.dataset.cycle) });
+          M.toast('تم تنزيل الشيت المجمع المعتمد');
+        } else if (approve) {
+          await request(M.post('approve_collection_assignment', { cycle_id: Number(approve.dataset.cycle), user_id: Number(approve.dataset.approveUser) }));
+          M.toast('تم اعتماد التسليم');
+          await openCycle(Number(approve.dataset.cycle));
+          await loadCycles();
+        } else if (archive && await M.confirm('سيتم إغلاق الدورة وحفظ لقطة أرشيفية للعملاء. هل تريد المتابعة؟', { danger: true, ok: 'أرشفة' })) {
+          const id = Number(archive.dataset.cycle);
+          const result = await request(M.post('close_collection_cycle', { cycle_id: id }));
+          M.toast(result.message || 'تمت الأرشفة');
+          await loadCycles();
+          await openCycle(id);
+        }
+      } catch (error) { M.err(error.message); }
+    });
+    detail.addEventListener('submit', async event => {
+      if (event.target.matches('#recordEmployeeCollection')) {
+        event.preventDefault();
+        const form = event.target;
+        const cycleId = Number(form.elements.cycle_id.value);
+        try {
+          const result = await request(M.post('record_employee_collection', {
+            cycle_id: cycleId,
+            employee_id: Number(form.elements.employee_id.value),
+            amount: form.elements.amount.value
+          }));
+          M.toast(result.message || 'تم تسجيل التحصيل');
+          await openCycle(cycleId);
+        } catch (error) { M.err(error.message); }
+        return;
+      }
+      if (event.target.matches('#combinedSheetForm')) {
+        event.preventDefault();
+        const form = event.target;
+        const employeeId = form.elements.assign_to.value;
+        const collectorValue = form.elements.collector_filter.value;
+        const selectedGroup = combinedSheetState.values.find(item => item.value === collectorValue);
+        if (!combinedSheetState.file || !employeeId || !collectorValue || !selectedGroup || selectedGroup.assigned_elsewhere) {
+          M.err('اختار الملف ومجموعة coll والموظف المطلوب');
+          return;
+        }
+        const body = new FormData();
+        body.append('sheet', combinedSheetState.file);
+        body.append('cycle_id', String(combinedSheetState.cycleId));
+        body.append('assign_to', employeeId);
+        body.append('collector_filter', collectorValue);
+        body.append('delete_old', '0');
+        const button = form.querySelector('button[type="submit"]');
+        try {
+          button.disabled = true;
+          button.textContent = 'جاري تصفية ورفع العملاء…';
+          const result = await request(M.api('?action=upload_sheet', { method: 'POST', body }));
+          combinedSheetState.selectedEmployee = employeeId;
+          combinedSheetState.selectedValue = collectorValue;
+          M.toast(result.message || 'تم رفع عملاء مجموعة coll للموظف');
+          await openCycle(combinedSheetState.cycleId);
+          await loadCycles();
+        } catch (error) {
+          M.err(error.message);
+          button.disabled = false;
+          button.innerHTML = `${M.icon('upload')} رفع العملاء المختارين`;
+        }
+        return;
+      }
+      if (!event.target.matches('#assignWorker')) return;
+      event.preventDefault();
+      const data = new FormData(event.target);
+      const id = Number(data.get('cycle_id'));
+      try {
+        const result = await request(M.post('collection_assign_employee', { cycle_id: id, user_id: Number(data.get('user_id')) }));
+        M.toast(result.message || 'تم الإسناد');
+        await openCycle(id);
+        await loadCycles();
+      } catch (error) { M.err(error.message); }
+    });
+    detail.addEventListener('change', async event => {
+      if (event.target.id === 'combinedSheetFile') {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        if (!/\.xlsx$/i.test(file.name)) { event.target.value = ''; return M.err('الملف لازم يكون بصيغة .xlsx'); }
+        if (file.size > 20 * 1024 * 1024) { event.target.value = ''; return M.err('حجم الملف أكبر من 20 ميجا'); }
+        combinedSheetState.file = file;
+        combinedSheetState.values = [];
+        combinedSheetState.selectedValue = '';
+        const label = detail.querySelector('#combinedSheetFileName');
+        if (label) label.textContent = file.name;
+        await previewCombinedSheet();
+      } else if (event.target.id === 'combinedSheetEmployee') {
+        combinedSheetState.selectedEmployee = event.target.value;
+        if (combinedSheetState.file) await previewCombinedSheet();
+      } else if (event.target.id === 'combinedSheetColl') {
+        combinedSheetState.selectedValue = event.target.value;
+      }
+    });
+    await loadCycles();
+  })();
+  </script>
+</body>
+</html>
